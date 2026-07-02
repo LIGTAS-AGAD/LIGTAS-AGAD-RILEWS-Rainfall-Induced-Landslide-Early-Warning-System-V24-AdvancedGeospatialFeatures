@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>LIGTAS-AGAD RILEWS | Rainfall-Induced Landslide Early Warning System V24-AdvancedGeospatialFeatures_LIGTAS-AGAD_sites_Focused</title>
+    <link rel="stylesheet" href="./style.css">
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIGTAS-AGAD RILEWS | Rainfall-Induced Landslide Early Warning System</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-search@3.0.2/dist/leaflet-search.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    
+    <link rel="stylesheet" href="./style.css">
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-search@3.0.2/dist/leaflet-search.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    
+    <div id="splash-screen">
+        <div class="splash-content">
+            <div class="splash-logos">
+                <img src="https://ligtas.uplb.edu.ph/wp-content/uploads/2022/04/3-e1659971771933.png" alt="LIGTAS Logo">
+            </div>
+            <h1>LIGTAS-AGAD RILEWS</h1>
+            <p>Landslide Warning and Advisory</p>
+            <div class="splash-spinner"></div>
+            <h3 id="splash-message">Initializing System & Loading Map Data...</h3>
+        </div>
+    </div>
+
+    <div id="errorOverride"><span id="errorMessage"></span></div>
+
+    <div id="header2">
+        <div class="header-left">
+            <img src="https://ligtas.uplb.edu.ph/wp-content/uploads/2022/04/3-e1659971771933.png" alt="LIGTAS Logo" class="header-logo">
+            <div class="header-title">LIGTAS-AGAD RILEWS | Rainfall-Induced Landslide Early Warning System</div>
+        </div>
+        <span id="real-time" class="desktop-clock"></span>
+        <button class="hamburger-btn" id="hamburgerBtn">☰</button>
+    </div>
+
+    <div id="subheader-wrapper">
+        <button class="scroll-arrow left-arrow" id="scrollLeftBtn">&#10094;</button>
+        
+        <div id="subheader" class="header-controls">
+            <span id="real-time-mobile" class="mobile-clock"></span>
+            
+            <div class="button-group-container">
+                <span class="group-label">SYSTEM</span>
+                <div class="button-pod">
+                    <button class="nav-btn" onclick="Homebutton()">Home</button>
+                    <button class="nav-btn" id="toggleEffectsBtn">Visual Effects</button>
+                    <button class="nav-btn" onclick="window.open('NotAvailable', '_blank')"> About</button>
+                </div>
+            </div>
+
+            <div class="button-group-container">
+                <span class="group-label">TOOLS</span>
+                <div class="button-pod">
+                    <button class="nav-btn btn-warning" id="assessLocationBtn">Assess Location</button>
+                     <button class="nav-btn" onclick="window.open('https://script.google.com/macros/s/AKfycbz5_G7ghXnc_k1vPKDVZA4VTCvf57YpK4PxULBT0GJM6Jhd_EBxObg4a2-EZkNSct8/exec', '_blank')">Detect Landslides</button>
+                </div>
+            </div>
+
+            <div class="button-group-container">
+                <span class="group-label">DATA</span>
+                <div class="button-pod">
+                    <button class="nav-btn btn-danger" id="toggle-buffer">AWS Warning</button>
+                    <button class="nav-btn btn-success" id="openAllStationsGraphBtn">All Stations</button>
+                    <button class="nav-btn" id="openAwsAdvisoriesBtn">Landslide Warning Advisories</button>
+                    <button class="nav-btn" onclick="window.open('https://www.pagasa.dost.gov.ph/weather/weather-advisory', '_blank')">PAGASA Advisories</button>
+                </div>
+            </div>
+
+            <div class="button-group-container">
+                <span class="group-label">VIEWS</span>
+                <div class="button-pod">
+                    <button class="nav-btn btn-warning" id="toggleMaskBtn">👁️ Mask Map</button>
+                    <button class="nav-btn" id="toggleDarkModeBtn">🌙 Dark Mode</button>
+                    <button class="nav-btn" id="openLegendBtn">🗺️ Legend</button>
+                    <button class="nav-btn" id="openControlsBtn">⚙️ Layer Controls</button>
+                    <button class="nav-btn" id="openPropertiesBtn">📋 Feature Properties</button>
+                </div>
+            </div>
+        </div>
+        
+        <button class="scroll-arrow right-arrow" id="scrollRightBtn">&#10095;</button>
+    </div>
+
+    <div class="map-panel-container">
+        <div id="map"></div>
+    </div>
+
+    <div id="alert-ticker">
+        <div class="ticker-label">STATUS</div>
+        <div class="ticker-content-wrapper">
+            <div id="ticker-text" class="ticker-text">
+                Fetching latest AWS station data...
+            </div>
+        </div>
+    </div>
+
+    <div id="legendModal" class="ui-modal">
+        <div class="ui-modal-content" style="max-width: 400px;">
+            <span class="close-ui-modal" id="closeLegendBtn">&times;</span>
+            <h3>🗺️ Map Legend</h3>
+            <div class="panel-content" id="legendModalContent">
+            </div>
+        </div>
+    </div>
+
+    <div id="controlsModal" class="ui-modal">
+        <div class="ui-modal-content">
+            <span class="close-ui-modal" id="closeControlsBtn">&times;</span>
+            <h3>⚙️ Map Controls & Forecast</h3>
+            <div class="panel-content">
+                <h4>Global Layers</h4>
+                <div class="layer-actions">
+                    <button id="loadAllLayersBtn">Load All</button>
+                    <button id="unloadAllLayersBtn">Unload All</button>
+                    <button id="defaultLayersBtn">Default</button>
+                </div>
+                <div id="layerControls"></div>
+                
+                <div class="slider-container" style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">
+                    <label>Susceptibility Opacity: <span id="opacityValue">30%</span></label>
+                    <input type="range" id="opacitySlider" min="0" max="100" value="30">
+                </div>
+                
+                <div class="slider-container" style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">
+                    <label>Base Map Opacity: <span id="baseMapOpacityValue">50%</span></label>
+                    <input type="range" id="baseMapOpacitySlider" min="0" max="100" value="50">
+                </div>
+
+                <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+                <h4>Raster Forecast</h4>
+                <div class="forecast-controls">
+                    <div id="currentGroup">Day: 1</div>
+                    <div class="btn-group">
+                        <button id="prevBtn">⏪</button>
+                        <button id="playBtn">▶️ Play</button>
+                        <button id="pauseBtn">⏸️</button>
+                        <button id="stopBtn">⏹️</button>
+                        <button id="nextBtn">⏩</button>
+                    </div>
+                    <div class="slider-container">
+                        <label>Speed: <span id="speedValue">5s</span></label>
+                        <input type="range" id="speedSlider" min="1" max="10" value="5">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="propertiesModal" class="ui-modal">
+        <div class="ui-modal-content" style="max-width: 500px;">
+            <span class="close-ui-modal" id="closePropertiesBtn">&times;</span>
+            <h3>📋 Feature Properties</h3>
+            <div class="panel-content">
+                <table id="propertiesTable">
+                    <thead>
+                        <tr>
+                            <th>Layer</th>
+                            <th>Property</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody id="propertiesTableBody">
+                        <tr><td colspan="3" style="text-align:center; padding:20px; color:#666;">Click on a map feature to view details here.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="allStationsGraphModal" class="ui-modal">
+        <div class="ui-modal-content" style="max-width: 800px; width: 95%;">
+            <span class="close-ui-modal" id="closeAllStationsGraphBtn">&times;</span>
+            <h3>📊 Data from all stations</h3>
+            <p style="text-align: center; font-size: 0.95rem; color: #666; margin-bottom: 10px;">
+                Current Total Rainfall (mm) | <strong><span id="awsTotalCount">0</span> Stations Online</strong>
+            </p>
+
+            <div style="text-align: center; margin-bottom: 15px;">
+                <label for="graphCategoryFilter" style="font-weight: bold; margin-right: 10px; color: var(--dark-teal);">Filter Region:</label>
+                <select id="graphCategoryFilter" class="nav-btn" style="padding: 6px 15px; border-radius: 5px; font-weight: bold; border: 1px solid #ccc; background: #fff; color: #333; cursor: pointer;">
+                    <option value="All">All Regions</option>
+                </select>
+            </div>
+            
+            <div class="panel-content chart-scroll-wrapper" style="width: 100%; overflow-x: auto; overflow-y: hidden; border: 1px solid #eee; border-radius: 4px; padding: 10px 0;">
+                <div id="chartAreaContainer" style="height: 380px; position: relative;">
+                    <canvas id="allStationsChart"></canvas>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                <button id="downloadGraphBtn" class="nav-btn btn-success" style="padding: 8px 25px; font-size: 1rem;">⬇️ Download Graph as Image</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="imageModal" class="image-modal" onclick="this.style.display='none'">
+        <span class="close-modal">&times;</span>
+        <img class="modal-content" id="img01">
+        <div id="caption"></div>
+    </div>
+
+    <div id="awsAdvisoriesModal" class="ui-modal">
+        <div class="ui-modal-content" style="max-width: 850px; width: 95%;">
+            <span class="close-ui-modal" id="closeAwsAdvisoriesBtn">&times;</span>
+            <h3>📋 AWS Station Advisories</h3>
+            <p style="text-align: center; font-size: 0.95rem; color: #666; margin-bottom: 10px;">
+                Current Status & 20km Buffer Coverage
+            </p>
+            
+            <div class="panel-content" id="awsAdvisoriesPrintArea" style="border: 1px solid #eee; border-radius: 4px; padding: 10px;">
+                <table class="popup-table" id="awsAdvisoriesTable">
+                    <thead>
+                        <tr>
+                            <th>Station Name</th>
+                            <th>Covered Area (Municipality)</th>
+                            <th>Rainfall Antecedent+Cumulative (7-days)</th>
+                            <th>Warning Level</th>
+                        </tr>
+                    </thead>
+                    <tbody id="awsAdvisoriesTableBody">
+                        <tr><td colspan="4" style="text-align:center;">Loading data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="text-align: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                <button id="downloadAwsAdvisoriesPdfBtn" class="nav-btn btn-danger" style="padding: 8px 25px; font-size: 1rem;">📥 Download Table as PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./script.js"></script>
+</body>
+</html>
+    <script  src="./script.js"></script>
+
+  </body>
+  
+</html>
