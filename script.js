@@ -539,7 +539,7 @@ createGeoJSONLayer('LIGTAS-LSDB', 'Recorded Landslides', 'https://raw.githubuser
     createGeoJSONLayer('MGB-HIGH', 'Susceptibility', 'https://raw.githubusercontent.com/Gabzrock/LIGTASAGADEWSV3/refs/heads/main/uRIL_AWS_High%20Susceptibility.geojson', { color: 'red', fillOpacity: 0.1, weight: 0.7, className: 'flashing-high', customPopupName: 'High Landslide Risk Area' }),
     createGeoJSONLayer('MGB-MED', 'Susceptibility', 'https://raw.githubusercontent.com/Gabzrock/LIGTASAGADEWSV3/refs/heads/main/uRIL_AWS_Moderate_Susceptibility.geojson', { color: 'yellow', fillOpacity: 0.6 }),
     createGeoJSONLayer('MGB-LOW', 'Susceptibility', 'https://raw.githubusercontent.com/Gabzrock/LIGTASAGADEWSV3/refs/heads/main/uRIL_AWS_Low_Susceptibility.geojson', { color: 'green', fillOpacity: 0.6 }),
-    createGeoJSONLayer('PH-Boundary', 'Boundary', 'https://raw.githubusercontent.com/faeldon/philippines-json-maps/refs/heads/master/2023/geojson/country/hires/country.0.1.json', { color: 'white', fillOpacity: 0.1, weight: 0.2,}),
+createGeoJSONLayer('PH-Boundary', 'Boundary', 'https://raw.githubusercontent.com/faeldon/philippines-json-maps/refs/heads/master/2023/geojson/country/hires/country.0.1.json', { color: 'white', fillOpacity: 0.1, weight: 0.2, interactive: false }),
 createGeoJSONLayer('LIGTAS-AGAD sites', 'Boundary', 'https://raw.githubusercontent.com/Gabzrock/LIGTASAGADsites/refs/heads/main/LIGTAS-AGAD_sites2.geojson', { color: 'cyan', fillOpacity: 0.1, weight: 0.2, pane: 'siteBoundaries', interactive: false })
 ];
 
@@ -771,6 +771,13 @@ Promise.allSettled(layerPromises).then((results) => {
     const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value === null));
     if (failed.length > 0) { showError(`${failed.length} layers failed to load. Check network.`, 'warning'); }
 
+    // --- NEW: AUTO-LOAD PH BOUNDARY ON STARTUP ---
+    const phBoundaryLayer = overlays['PH-Boundary: Boundary'];
+    if (phBoundaryLayer && !map.hasLayer(phBoundaryLayer)) {
+        map.addLayer(phBoundaryLayer);
+    }
+    // ---------------------------------------------
+
     try { initSidebarControls(); } catch (e) { console.error("Error setting default layers", e); }
 });
 
@@ -807,7 +814,43 @@ if (baseMapOpacitySlider && baseMapOpacityValue) {
         });
     };
 }
+// --- BOUNDARY STYLE CONTROLS LOGIC ---
+const phBoundaryColor = document.getElementById('phBoundaryColor');
+const phBoundaryOpacitySlider = document.getElementById('phBoundaryOpacitySlider');
+const phBoundaryOpacityValue = document.getElementById('phBoundaryOpacityValue');
 
+const ligtasSitesColor = document.getElementById('ligtasSitesColor');
+const ligtasSitesOpacitySlider = document.getElementById('ligtasSitesOpacitySlider');
+const ligtasSitesOpacityValue = document.getElementById('ligtasSitesOpacityValue');
+
+// Helper function to update color and opacity dynamically
+function updateBoundaryStyle(layerName, colorInput, opacityInput, opacityText) {
+    const layer = overlays[layerName];
+    if (layer) {
+        const newColor = colorInput.value;
+        const newOpacity = opacityInput.value / 100;
+        if (opacityText) opacityText.innerHTML = opacityInput.value + "%";
+        
+        layer.setStyle({
+            color: newColor,       // Updates the border line color
+            fillColor: newColor,   // Updates the inside fill color
+            fillOpacity: newOpacity,
+            weight: 0.2            // Keeps the thin boundary line weight
+        });
+    }
+}
+
+// Attach event listeners so it updates in real-time as the user drags/clicks
+if (phBoundaryColor && phBoundaryOpacitySlider) {
+    phBoundaryColor.addEventListener('input', () => updateBoundaryStyle('PH-Boundary: Boundary', phBoundaryColor, phBoundaryOpacitySlider, phBoundaryOpacityValue));
+    phBoundaryOpacitySlider.addEventListener('input', () => updateBoundaryStyle('PH-Boundary: Boundary', phBoundaryColor, phBoundaryOpacitySlider, phBoundaryOpacityValue));
+}
+
+if (ligtasSitesColor && ligtasSitesOpacitySlider) {
+    ligtasSitesColor.addEventListener('input', () => updateBoundaryStyle('LIGTAS-AGAD sites: Boundary', ligtasSitesColor, ligtasSitesOpacitySlider, ligtasSitesOpacityValue));
+    ligtasSitesOpacitySlider.addEventListener('input', () => updateBoundaryStyle('LIGTAS-AGAD sites: Boundary', ligtasSitesColor, ligtasSitesOpacitySlider, ligtasSitesOpacityValue));
+}
+// -------------------------------------
 // ==========================================
 // 7. DATA FETCHING & PROCESSING
 // ==========================================
@@ -1777,4 +1820,281 @@ function checkAndTriggerMobileNotification(station) {
             }
         }
     }
+}
+// =========================================================
+// 15. CUSTOM GEOJSON LOADER (FILE & URL) - 10MB LIMIT
+// =========================================================
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+
+// Helper to draw the custom data on the map
+function addCustomGeojsonToMap(data, layerName, colorHex) {
+    try {
+        const layer = L.geoJSON(data, {
+            // Apply the user's chosen color here
+            style: { color: colorHex, weight: 2, fillOpacity: 0.3, fillColor: colorHex },
+            pointToLayer: (feature, latlng) => {
+                return L.circleMarker(latlng, { radius: 6, color: colorHex, fillColor: colorHex, fillOpacity: 0.8, weight: 1 });
+            },
+            onEachFeature: (feature, layer) => {
+                let popupRows = '';
+                if (feature.properties) {
+                    for (const [key, value] of Object.entries(feature.properties)) {
+                        popupRows += `<tr><th style="width:40%;">${key}</th><td>${value}</td></tr>`;
+                    }
+                }
+                const popupContent = `
+                    <div class="popup-container">
+                        <div class="popup-header" style="background-color: ${colorHex};">${layerName}</div>
+                        <div class="popup-scroll-container">
+                            <table class="popup-table">${popupRows || '<tr><td>No properties available.</td></tr>'}</table>
+                        </div>
+                    </div>
+                `;
+                layer.bindPopup(popupContent);
+                layer.on('click', () => { updatePropertiesTable(`Custom: ${layerName}`, feature.properties || {}); });
+            }
+        });
+
+        if (layer.getLayers().length === 0) throw new Error("No valid map features found in file.");
+
+        // Add to map and register to global lists
+        layer.addTo(map);
+        const finalName = `Custom: ${layerName}`;
+        overlays[finalName] = layer;
+        
+        if (layerControl) { layerControl.addOverlay(layer, finalName); }
+        if (typeof initSidebarControls === 'function') { initSidebarControls(); }
+        
+        map.fitBounds(layer.getBounds());
+        showError(`Successfully loaded: ${layerName}`, "warning"); 
+        
+    } catch (err) {
+        console.error(err);
+        showError("Failed to render GeoJSON. File may be corrupted or incorrectly formatted.", "error");
+    }
+}
+
+// 1. Handle Local File Upload
+const customFileInput = document.getElementById('customGeojsonFile');
+if (customFileInput) {
+    customFileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > MAX_FILE_SIZE) {
+            showError("File exceeds the maximum 10MB limit.", "error");
+            customFileInput.value = "";
+            return;
+        }
+
+        // Get the chosen color
+        const colorInput = document.getElementById('customGeojsonColor');
+        const chosenColor = colorInput ? colorInput.value : '#9b59b6';
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                const geojsonData = JSON.parse(event.target.result);
+                addCustomGeojsonToMap(geojsonData, file.name, chosenColor);
+            } catch (err) {
+                showError("Invalid JSON structure in file.", "error");
+            }
+            customFileInput.value = ""; 
+        };
+        reader.readAsText(file);
+    });
+}
+
+// 2. Handle Web URL Fetch
+const loadCustomUrlBtn = document.getElementById('loadCustomUrlBtn');
+const customGeojsonUrl = document.getElementById('customGeojsonUrl');
+if (loadCustomUrlBtn && customGeojsonUrl) {
+    loadCustomUrlBtn.addEventListener('click', function() {
+        const url = customGeojsonUrl.value.trim();
+        if (!url) return;
+
+        const originalText = loadCustomUrlBtn.innerText;
+        loadCustomUrlBtn.innerText = "⏳...";
+        loadCustomUrlBtn.disabled = true;
+
+        // Get the chosen color
+        const colorInput = document.getElementById('customGeojsonColor');
+        const chosenColor = colorInput ? colorInput.value : '#9b59b6';
+
+        fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const contentLength = response.headers.get('content-length');
+                if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE) {
+                    throw new Error("Remote file exceeds the 10MB limit.");
+                }
+                return response.text();
+            })
+            .then(text => {
+                if (new Blob([text]).size > MAX_FILE_SIZE) {
+                    throw new Error("Remote file data exceeds the 10MB limit.");
+                }
+                const geojsonData = JSON.parse(text);
+                const filename = url.split('/').pop().split('?')[0] || 'Web Layer';
+                addCustomGeojsonToMap(geojsonData, filename, chosenColor);
+                customGeojsonUrl.value = ""; 
+            })
+            .catch(err => {
+                showError(err.message === "Failed to fetch" ? "Network error or blocked by CORS." : err.message, "error");
+            })
+            .finally(() => {
+                loadCustomUrlBtn.innerText = originalText;
+                loadCustomUrlBtn.disabled = false;
+            });
+    });
+}
+// =========================================================
+// 16. KMZ EXPORT FEATURE (BUG FIX & DATA SANITIZATION)
+// =========================================================
+
+const exportKmlBtn = document.getElementById('exportKmlBtn');
+if (exportKmlBtn) {
+    exportKmlBtn.addEventListener('click', () => {
+        // Check if BOTH libraries loaded properly
+        if (typeof tokml === 'undefined' || typeof JSZip === 'undefined') {
+            showError("Export libraries not loaded. Please wait a moment or check your internet connection.", "error");
+            return;
+        }
+
+        const originalText = exportKmlBtn.innerText;
+        exportKmlBtn.innerText = "⏳ Processing Map Data...";
+        exportKmlBtn.disabled = true;
+
+        try {
+            let allFeatures = [];
+
+            // --- DEFENSIVE DATA SANITIZER ---
+            function addSafeFeature(f, layerName) {
+                if (!f || !f.geometry || !f.geometry.type || !f.geometry.coordinates) return;
+                if (Array.isArray(f.geometry.coordinates) && f.geometry.coordinates.length === 0) return;
+
+                if (!f.properties) f.properties = {};
+                f.properties.LayerName = layerName; // Folders in Google Earth
+
+                // Flatten nested objects/arrays in properties 
+                for (let key in f.properties) {
+                    if (typeof f.properties[key] === 'object' && f.properties[key] !== null) {
+                        try {
+                            f.properties[key] = JSON.stringify(f.properties[key]);
+                        } catch (e) {
+                            f.properties[key] = "Data";
+                        }
+                    }
+                }
+                allFeatures.push(f);
+            }
+            // -----------------------------------------
+
+            // 1. Extract features from all standard Overlays & Custom Uploads
+            Object.keys(overlays).forEach(name => {
+                const layer = overlays[name];
+                if (map.hasLayer(layer) && typeof layer.toGeoJSON === 'function') {
+                    const geojson = layer.toGeoJSON();
+                    if (geojson.type === "FeatureCollection") {
+                        geojson.features.forEach(f => addSafeFeature(f, name));
+                    } else if (geojson.type === "Feature") {
+                        addSafeFeature(geojson, name);
+                    }
+                }
+            });
+
+            // 2. Extract features from the AWS Warning Buffers & Markers
+            if (typeof warningLayerGroup !== 'undefined' && map.hasLayer(warningLayerGroup)) {
+                warningLayerGroup.eachLayer(layer => {
+                    if (typeof layer.toGeoJSON === 'function') {
+                        const geojson = layer.toGeoJSON();
+                        if (geojson.type === "FeatureCollection") {
+                            geojson.features.forEach(f => addSafeFeature(f, "AWS Station / 20km Buffer"));
+                        } else {
+                            addSafeFeature(geojson, "AWS Station / 20km Buffer");
+                        }
+                    }
+                });
+            }
+
+            // 3. Extract user-drawn shapes (My Drawings)
+            if (typeof drawnItems !== 'undefined' && map.hasLayer(drawnItems)) {
+                drawnItems.eachLayer(layer => {
+                    if (typeof layer.toGeoJSON === 'function') {
+                        const geojson = layer.toGeoJSON();
+                        
+                        // Note: Leaflet Draw Circles natively export to GeoJSON as just a Point (the center).
+                        // Polygons, Rectangles, Lines, and Markers export perfectly.
+                        if (geojson.type === "FeatureCollection") {
+                            geojson.features.forEach(f => addSafeFeature(f, "My Drawings"));
+                        } else {
+                            addSafeFeature(geojson, "My Drawings");
+                        }
+                    }
+                });
+            }
+
+            if (allFeatures.length === 0) {
+                showError("No valid shapes to export. Turn on layers or draw shapes first.", "warning");
+                exportKmlBtn.innerText = originalText;
+                exportKmlBtn.disabled = false;
+                return;
+            }
+
+            const combinedGeoJSON = { type: "FeatureCollection", features: allFeatures };
+
+            // --- CONVERT TO KML ---
+            exportKmlBtn.innerText = "⏳ Converting to KML...";
+            let kmlString = "";
+            
+            try {
+                kmlString = tokml(combinedGeoJSON, {
+                    documentName: 'LIGTAS-AGAD Map Export',
+                    documentDescription: 'Exported active layers and drawings from LIGTAS-AGAD RILEWS',
+                    name: 'LayerName' 
+                });
+            } catch (tokmlError) {
+                console.error("tokml Conversion Error:", tokmlError);
+                throw new Error("Failed to convert map data. Check the console for invalid shape details.");
+            }
+
+            // --- COMPRESS INTO KMZ ---
+            exportKmlBtn.innerText = "⏳ Compressing KMZ...";
+            const zip = new JSZip();
+            zip.file("doc.kml", kmlString); 
+
+            zip.generateAsync({
+                type: "blob",
+                compression: "DEFLATE",
+                compressionOptions: { level: 6 } 
+            }).then(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const timestamp = new Date().toISOString().replace(/T/, '_').replace(/:/g, '-').split('.')[0];
+                
+                a.href = url;
+                a.download = `LIGTAS_Export_${timestamp}.kmz`; 
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showError("KMZ file downloaded successfully!", "warning");
+            }).catch(function(err) {
+                console.error("Zipping Error:", err);
+                throw new Error("Failed to compress file into KMZ format.");
+            }).finally(function() {
+                exportKmlBtn.innerText = originalText;
+                exportKmlBtn.disabled = false;
+            });
+
+        } catch (err) {
+            console.error("Export Process Error:", err);
+            showError(err.message || "An error occurred while building the map data.", "error");
+            exportKmlBtn.innerText = originalText;
+            exportKmlBtn.disabled = false;
+        }
+    });
 }
