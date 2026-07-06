@@ -356,3 +356,18 @@ body.disable-effects .ticker-text {
     position: relative !important; 
     padding-left: 15px; 
 }
+/* =========================================
+   17. WORKSPACE SETTINGS PANEL DARK MODE
+   ========================================= */
+body.dark-mode #controlsModal div[style*="background: #f8f9fa"] {
+    background: #2a2a2a !important;
+    border-color: #444 !important;
+}
+
+body.dark-mode #controlsModal div[style*="background: #f8f9fa"] span {
+    color: #bbb !important;
+}
+
+body.dark-mode #controlsModal div[style*="background: #f8f9fa"] label {
+    color: #80cbc4 !important;
+}
