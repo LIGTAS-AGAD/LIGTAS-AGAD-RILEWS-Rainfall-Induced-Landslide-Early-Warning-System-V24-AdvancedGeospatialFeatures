@@ -343,3 +343,16 @@ body.dark-mode .chart-scroll-wrapper { border: 1px solid #444; }
 .sync-text { display: flex; flex-direction: column; line-height: 1.3; }
 .sync-text strong { font-size: 0.85rem; color: var(--dark-teal, #1a3b42); text-transform: uppercase; }
 .sync-text span { font-size: 0.75rem; color: #666; font-weight: 500; }
+/* =========================================
+   DISABLE EFFECTS OVERRIDE FOR TICKER
+   ========================================= */
+body.disable-effects .ticker-content-wrapper {
+    overflow-x: auto; /* Allows the user to manually swipe/scroll to read it */
+}
+
+body.disable-effects .ticker-text {
+    animation: none !important; /* Stops the heavy CPU animation */
+    transform: translateX(0) !important; /* Resets it to the left side */
+    position: relative !important; 
+    padding-left: 15px; 
+}
