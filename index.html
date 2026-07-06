@@ -1,16 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
-  <head>
-    <meta charset="UTF-8">
-    <title>LIGTAS-AGAD RILEWS | Rainfall-Induced Landslide Early Warning System V24-AdvancedGeospatialFeatures_LIGTAS-AGAD_sites_Focused</title>
-    <link rel="stylesheet" href="./style.css">
-
-  </head>
-    
-  <body>
-  <!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -30,6 +19,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/tokml@0.4.0/tokml.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>  
 </head>
 <body>
     
@@ -144,12 +135,58 @@
                     <input type="range" id="opacitySlider" min="0" max="100" value="30">
                 </div>
                 
-                <div class="slider-container" style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">
+<div class="slider-container" style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">
                     <label>Base Map Opacity: <span id="baseMapOpacityValue">50%</span></label>
                     <input type="range" id="baseMapOpacitySlider" min="0" max="100" value="50">
                 </div>
 
+                <div class="slider-container" style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">
+                    <label style="display:flex; justify-content:space-between; align-items:center;">
+                        PH-Boundary Color: <input type="color" id="phBoundaryColor" value="#ffffff" style="cursor:pointer; width:30px; height:25px; padding:0; border:none; background:none;">
+                    </label>
+                    <label>PH-Boundary Opacity: <span id="phBoundaryOpacityValue">10%</span></label>
+                    <input type="range" id="phBoundaryOpacitySlider" min="0" max="100" value="10">
+                </div>
+
+                <div class="slider-container" style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">
+                    <label style="display:flex; justify-content:space-between; align-items:center;">
+                        LIGTAS Sites Color: <input type="color" id="ligtasSitesColor" value="#00ffff" style="cursor:pointer; width:30px; height:25px; padding:0; border:none; background:none;">
+                    </label>
+                    <label>LIGTAS Sites Opacity: <span id="ligtasSitesOpacityValue">10%</span></label>
+                    <input type="range" id="ligtasSitesOpacitySlider" min="0" max="100" value="10">
+                </div>
                 <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+<hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+                <h4>📤 Load Custom GeoJSON (Max 10MB)</h4>
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; background: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #eee;">
+                    
+                    <label style="display:flex; justify-content:space-between; align-items:center; font-size: 0.85rem; font-weight: bold; color: var(--dark-teal);">
+                        Layer Color: <input type="color" id="customGeojsonColor" value="#9b59b6" style="cursor:pointer; width:30px; height:25px; padding:0; border:none; background:none;">
+                    </label>
+                    <hr style="margin: 0; border: 0; border-top: 1px solid #ddd;">
+
+                    <div>
+                        <label style="font-size: 0.85rem; font-weight: bold; color: var(--dark-teal);">From Local File:</label>
+                        <input type="file" id="customGeojsonFile" accept=".geojson,.json" style="width: 100%; font-size: 0.8rem; margin-top: 5px; cursor: pointer;">
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <label style="font-size: 0.85rem; font-weight: bold; color: var(--dark-teal);">From Web URL:</label>
+                        <div style="display: flex; gap: 5px; margin-top: 5px;">
+                            <input type="text" id="customGeojsonUrl" placeholder="https://domain.com/data.geojson" style="flex-grow: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.8rem;">
+                            <button id="loadCustomUrlBtn" style="background: var(--primary-color); color: white; border: none; padding: 0 12px; border-radius: 4px; font-weight: bold; cursor: pointer;">Load</button>
+                        </div>
+                    </div>
+                </div>
+              
+              <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+                <h4>📥 Export Map Data</h4>
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+                    <button id="exportKmlBtn" style="background: #27ae60; color: white; border: none; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s;">
+                        Export Active Layers to KML
+                    </button>
+                    <span style="font-size: 0.75rem; color: #666; text-align: center;">(Exports only the layers currently toggled ON)</span>
+                </div>
+              
                 <h4>Raster Forecast</h4>
                 <div class="forecast-controls">
                     <div id="currentGroup">Day: 1</div>
@@ -255,9 +292,4 @@
 
     <script src="./script.js"></script>
 </body>
-</html>
-    <script  src="./script.js"></script>
-
-  </body>
-  
 </html>
