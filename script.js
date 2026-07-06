@@ -2098,3 +2098,161 @@ if (exportKmlBtn) {
         }
     });
 }
+// =========================================================
+// 17. EXPORT & IMPORT WORKSPACE SETTINGS (.TXT / JSON)
+// =========================================================
+
+const exportSettingsBtn = document.getElementById('exportSettingsBtn');
+const importSettingsFile = document.getElementById('importSettingsFile');
+
+// --- 1. EXPORT SETTINGS LOGIC ---
+if (exportSettingsBtn) {
+    exportSettingsBtn.addEventListener('click', () => {
+        try {
+            // Determine active base map name
+            let activeBaseMap = "Streets";
+            if (typeof baseLayersData !== 'undefined') {
+                for (const [name, layer] of Object.entries(baseLayersData)) {
+                    if (map.hasLayer(layer)) {
+                        activeBaseMap = name;
+                        break;
+                    }
+                }
+            }
+
+            // Collect checkboxes states from the sidebar
+            const layerToggleStates = {};
+            document.querySelectorAll('.layer-toggle-input').forEach(input => {
+                if (input.id) {
+                    layerToggleStates[input.id] = input.checked;
+                }
+            });
+
+            // Build Settings Bundle
+            const settingsBundle = {
+                version: "2.4",
+                timestamp: new Date().toISOString(),
+                mapState: {
+                    center: map.getCenter(),
+                    zoom: map.getZoom(),
+                    baseMap: activeBaseMap
+                },
+                themeState: {
+                    darkMode: document.body.classList.contains('dark-mode'),
+                    disableEffects: document.body.classList.contains('disable-effects'),
+                    isMasked: document.getElementById('toggleMaskBtn') && document.getElementById('toggleMaskBtn').classList.contains('btn-active')
+                },
+                sliders: {
+                    susceptibilityOpacity: document.getElementById('opacitySlider') ? document.getElementById('opacitySlider').value : 30,
+                    baseMapOpacity: document.getElementById('baseMapOpacitySlider') ? document.getElementById('baseMapOpacitySlider').value : 50,
+                    phBoundaryColor: document.getElementById('phBoundaryColor') ? document.getElementById('phBoundaryColor').value : '#ffffff',
+                    phBoundaryOpacity: document.getElementById('phBoundaryOpacitySlider') ? document.getElementById('phBoundaryOpacitySlider').value : 10,
+                    ligtasSitesColor: document.getElementById('ligtasSitesColor') ? document.getElementById('ligtasSitesColor').value : '#00ffff',
+                    ligtasSitesOpacity: document.getElementById('ligtasSitesOpacitySlider') ? document.getElementById('ligtasSitesOpacitySlider').value : 10
+                },
+                layers: layerToggleStates
+            };
+
+            // Convert to formatted string and trigger download
+            const dataStr = JSON.stringify(settingsBundle, null, 2);
+            const blob = new Blob([dataStr], { type: "text/plain;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            const dateTag = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `LIGTAS_Settings_${dateTag}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showError("Workspace settings successfully exported to .txt!", "warning");
+        } catch (err) {
+            console.error("Export Settings Error:", err);
+            showError("Failed to export settings.", "error");
+        }
+    });
+}
+
+// --- 2. IMPORT SETTINGS LOGIC ---
+if (importSettingsFile) {
+    importSettingsFile.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                const settings = JSON.parse(event.target.result);
+                
+                if (!settings || !settings.mapState || !settings.sliders) {
+                    throw new Error("Invalid format. Missing required settings structures.");
+                }
+
+                // A. Restore Map Viewport & Basemap
+                if (settings.mapState.center && settings.mapState.zoom) {
+                    map.setView([settings.mapState.center.lat, settings.mapState.center.lng], settings.mapState.zoom);
+                }
+                if (settings.mapState.baseMap && typeof baseLayersData !== 'undefined' && baseLayersData[settings.mapState.baseMap]) {
+                    Object.values(baseLayersData).forEach(layer => map.removeLayer(layer));
+                    map.addLayer(baseLayersData[settings.mapState.baseMap]);
+                }
+
+                // B. Restore Themes (Dark Mode & Visual Effects)
+                if (typeof enableDarkMode === 'function' && settings.themeState) {
+                    enableDarkMode(settings.themeState.darkMode);
+                    localStorage.setItem('ligtas-dark-mode', settings.themeState.darkMode);
+                }
+                const effectsBtn = document.getElementById('toggleEffectsBtn');
+                if (settings.themeState && effectsBtn) {
+                    const currentlyDisabled = document.body.classList.contains('disable-effects');
+                    if (settings.themeState.disableEffects !== currentlyDisabled) {
+                        effectsBtn.click();
+                    }
+                }
+
+                // C. Restore Sliders
+                const s = settings.sliders;
+                const triggerInput = (el, val) => {
+                    if (el) { el.value = val; el.dispatchEvent(new Event('input')); }
+                };
+
+                triggerInput(document.getElementById('opacitySlider'), s.susceptibilityOpacity);
+                triggerInput(document.getElementById('baseMapOpacitySlider'), s.baseMapOpacity);
+                triggerInput(document.getElementById('phBoundaryColor'), s.phBoundaryColor);
+                triggerInput(document.getElementById('phBoundaryOpacitySlider'), s.phBoundaryOpacity);
+                triggerInput(document.getElementById('ligtasSitesColor'), s.ligtasSitesColor);
+                triggerInput(document.getElementById('ligtasSitesOpacitySlider'), s.ligtasSitesOpacity);
+
+                // D. Restore Focus Mask Mode
+                const maskBtn = document.getElementById('toggleMaskBtn');
+                if (maskBtn && settings.themeState && typeof settings.themeState.isMasked !== 'undefined') {
+                    const isCurrentlyMasked = maskBtn.classList.contains('btn-active');
+                    if (settings.themeState.isMasked !== isCurrentlyMasked) {
+                        maskBtn.click();
+                    }
+                }
+
+                // E. Restore Layer Control Checkboxes & Visibilities
+                if (settings.layers) {
+                    for (const [id, shouldBeChecked] of Object.entries(settings.layers)) {
+                        const cb = document.getElementById(id);
+                        if (cb && cb.checked !== shouldBeChecked) {
+                            cb.click(); // Using click() natively toggles the Leaflet layer and UI syncs
+                        }
+                    }
+                }
+
+                showError("Workspace settings imported and restored successfully!", "warning");
+                importSettingsFile.value = ""; // Reset input so same file can be loaded again if needed
+                
+            } catch (err) {
+                console.error("Import Settings Error:", err);
+                showError("Failed to load settings file. Ensure it is a valid LIGTAS .txt configuration.", "error");
+                importSettingsFile.value = "";
+            }
+        };
+        reader.readAsText(file);
+    });
+}
