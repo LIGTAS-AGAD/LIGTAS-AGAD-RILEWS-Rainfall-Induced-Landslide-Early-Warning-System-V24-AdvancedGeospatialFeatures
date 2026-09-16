@@ -40,8 +40,6 @@
         </div>
     </div>
 
-    <div id="errorOverride"><span id="errorMessage"></span></div>
-
     <div id="header2">
         <div class="header-left">
             <img src="https://ligtas.uplb.edu.ph/wp-content/uploads/2022/04/3-e1659971771933.png" alt="LIGTAS Logo" class="header-logo">
@@ -87,6 +85,7 @@
             <div class="button-group-container">
                 <span class="group-label">VIEWS</span>
                 <div class="button-pod">
+                    <button class="nav-btn" id="resetMapViewBtn" onclick="resetMapView()" title="Reset map view to default and clear radar assessments">🔄 Reset Map View</button>
                     <button class="nav-btn btn-warning" id="toggleMaskBtn">👁️ Mask Map</button>
                     <button class="nav-btn" id="toggleDarkModeBtn">🌙 Dark Mode</button>
                     <button class="nav-btn" id="openLegendBtn">🗺️ Legend</button>
@@ -101,6 +100,11 @@
 
     <div class="map-panel-container">
         <div id="map"></div>
+        <div id="errorOverride" class="map-floating-notice info" role="alert" aria-live="polite">
+            <span class="notice-icon" id="errorIcon">ℹ️</span>
+            <span id="errorMessage"></span>
+            <button type="button" class="notice-close-btn" id="closeNoticeBtn" aria-label="Close notification" onclick="hideErrorNotification()">&times;</button>
+        </div>
     </div>
 
     <div id="alert-ticker">
@@ -333,8 +337,8 @@
                         <div class="toggle-header">
                             <span class="toggle-icon">⛰️</span>
                             <div class="toggle-label-wrap">
-                                <strong>Landslide Data</strong>
-                                <span>MGB & LSDB Hazards</span>
+                                <strong>Landslide Hazard Zones</strong>
+                                <span>MGB Susceptibility (Zero Lag)</span>
                             </div>
                         </div>
                         <label class="switch-toggle" title="Toggle Landslide Data">
