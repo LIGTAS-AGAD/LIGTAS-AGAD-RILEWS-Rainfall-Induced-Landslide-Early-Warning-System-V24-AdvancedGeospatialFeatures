@@ -485,10 +485,10 @@ h1, h2, h3, h4, .header-title {
 #splash-message { font-weight: bold; font-size: 1.1rem; color: #FFD700; letter-spacing: 0.5px; }
 
 @keyframes pulse-expand { 0% { transform: scale(0.5); opacity: 1.5; } 100% { transform: scale(1.0); opacity: 0; } }
-.pulse-layer { transform-box: fill-box; transform-origin: center center; animation: pulse-expand 4s infinite cubic-bezier(0.2, 0.6, 0.4, 1); pointer-events: none; will-change: transform, opacity; }
+.pulse-layer { transform-box: fill-box; transform-origin: center center; animation: pulse-expand 4s infinite cubic-bezier(0.2, 0.6, 0.4, 1); pointer-events: none; }
 
 @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
-.flashing-high { animation: flash 4s infinite ease-in-out; will-change: opacity; }
+.flashing-high { animation: flash 4s infinite ease-in-out; }
 
 body.disable-effects .pulse-layer { display: none !important; }
 body.disable-effects .flashing-high { animation: none !important; opacity: 0.8 !important; }
