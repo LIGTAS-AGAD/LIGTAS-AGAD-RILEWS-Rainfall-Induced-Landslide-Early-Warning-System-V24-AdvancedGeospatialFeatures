@@ -2,17 +2,69 @@
 // 1. GLOBAL ERROR HANDLING & UTILITIES
 // ==========================================
 
+let errorOverrideTimer = null;
+
+function hideErrorNotification() {
+    const errDiv = document.getElementById('errorOverride');
+    if (!errDiv) return;
+    if (errorOverrideTimer) {
+        clearTimeout(errorOverrideTimer);
+        errorOverrideTimer = null;
+    }
+    errDiv.classList.add('notice-hiding');
+    setTimeout(() => {
+        errDiv.style.display = 'none';
+        errDiv.classList.remove('notice-hiding');
+    }, 250);
+}
+window.hideErrorNotification = hideErrorNotification;
+
 function showError(message, type = 'error') {
     const errDiv = document.getElementById('errorOverride');
     const errMsg = document.getElementById('errorMessage');
+    const errIcon = document.getElementById('errorIcon');
     
     if (errDiv && errMsg) {
-        errMsg.innerHTML = `<strong>${type === 'error' ? 'System Error' : 'Notice'}:</strong> ${message}`;
-        errDiv.className = type; 
-        errDiv.style.display = 'block';
-        if (type === 'warning') { setTimeout(() => { errDiv.style.display = 'none'; }, 5000); }
+        if (errorOverrideTimer) {
+            clearTimeout(errorOverrideTimer);
+            errorOverrideTimer = null;
+        }
+
+        let typeLabel = 'Notice';
+        let defaultIcon = 'ℹ️';
+
+        if (type === 'error') {
+            typeLabel = 'System Error';
+            defaultIcon = '❌';
+        } else if (type === 'warning') {
+            typeLabel = 'Warning';
+            defaultIcon = '⚠️';
+        } else if (type === 'info') {
+            typeLabel = 'Notice';
+            defaultIcon = 'ℹ️';
+        }
+
+        if (errIcon) {
+            errIcon.innerText = defaultIcon;
+        }
+
+        errMsg.innerHTML = `<strong>${typeLabel}:</strong> ${message}`;
+        errDiv.className = `map-floating-notice ${type}`;
+        errDiv.classList.remove('notice-hiding');
+        errDiv.style.display = 'flex';
+
+        // Auto-dismiss notices and warnings after 5 seconds, errors after 8 seconds
+        const timeoutMs = type === 'error' ? 8000 : 5000;
+        errorOverrideTimer = setTimeout(() => {
+            hideErrorNotification();
+        }, timeoutMs);
     }
-    console.error(`[${type.toUpperCase()}] ${message}`);
+
+    if (type === 'error') {
+        console.error(`[${type.toUpperCase()}] ${message}`);
+    } else {
+        console.log(`[${type.toUpperCase()}] ${message}`);
+    }
 }
 
 function showLoadingScreen(customMessage) {
@@ -197,11 +249,15 @@ function toggleLandslideMask() {
 }
 
 function updateMaskButtonUI(isActive) {
-    const btn = document.getElementById('toggleMaskBtn');
-    if (btn) {
+    const popupBtn = document.getElementById('toggleLs5kmMaskBtn');
+    if (popupBtn) {
+        popupBtn.innerHTML = isActive ? '🌐 Show All Regional Landslides' : '🎯 Mask Landslides > 5km';
+        popupBtn.classList.toggle('active', isActive);
+    }
+    document.querySelectorAll('.toggle-ls-mask-btn').forEach(btn => {
         btn.innerHTML = isActive ? '🌐 Show All Regional Landslides' : '🎯 Mask Landslides > 5km';
         btn.classList.toggle('active', isActive);
-    }
+    });
     const badge = document.getElementById('bufferMaskBadge');
     if (badge) {
         badge.className = `buffer-status-badge ${isActive ? 'badge-active' : 'badge-inactive'}`;
@@ -244,8 +300,35 @@ function clearUserLocationAssessment() {
     }
 
     clearLandslide5KmMask();
+    if (typeof hideLandslidePointsLSDB === 'function') {
+        hideLandslidePointsLSDB();
+    }
     showError("GPS Proximity Landslide Radar cleared and normal map view restored.", "info");
 }
+
+function resetMapView() {
+    if (!map) return;
+    const center = (typeof initialCenter !== 'undefined') ? initialCenter : [12.8797, 121.7740];
+    const zoom = (typeof initialZoom !== 'undefined') ? initialZoom : 6;
+    const hadRadar = (typeof userAssessmentActive !== 'undefined' && userAssessmentActive);
+
+    if (typeof clearUserLocationAssessment === 'function') {
+        clearUserLocationAssessment();
+    }
+    if (typeof resetGeoJSONHighlight === 'function') {
+        resetGeoJSONHighlight();
+    }
+    if (typeof hideLandslidePointsLSDB === 'function') {
+        hideLandslidePointsLSDB();
+    }
+    map.closePopup();
+    map.setView(center, zoom);
+    if (!hadRadar) {
+        showError("Map view reset to default.", "info");
+    }
+}
+window.resetMapView = resetMapView;
+
 
 
 function focusMapOnPopup(latlng, targetZoom = null) {
@@ -290,7 +373,37 @@ function setVisualEffects(enabled, showNotice = false) {
     }
 }
 
-function setLandslideData(enabled, showNotice = false) {
+function hideLandslidePointsLSDB() {
+    if (detectedLandslidePingsGroup && map) {
+        detectedLandslidePingsGroup.clearLayers();
+        if (map.hasLayer(detectedLandslidePingsGroup)) {
+            map.removeLayer(detectedLandslidePingsGroup);
+        }
+    }
+    if (typeof overlays !== 'undefined') {
+        Object.keys(overlays).forEach(k => {
+            if (k.includes('LIGTAS-LSDB') || k.includes('LandslideDB') || k.includes('Recorded Landslides')) {
+                const layer = overlays[k];
+                if (layer && map && map.hasLayer(layer)) {
+                    map.removeLayer(layer);
+                }
+            }
+        });
+    }
+    const lsLayer = getLandslidesLayer();
+    if (lsLayer && map && map.hasLayer(lsLayer)) {
+        map.removeLayer(lsLayer);
+    }
+    document.querySelectorAll('.layer-toggle-input').forEach(cb => {
+        const label = cb.nextElementSibling ? cb.nextElementSibling.innerText : '';
+        if (label.includes('LIGTAS-LSDB') || label.includes('Recorded Landslides')) {
+            cb.checked = false;
+        }
+    });
+}
+window.hideLandslidePointsLSDB = hideLandslidePointsLSDB;
+
+function setLandslideData(enabled, showNotice = false, includeLSDB = false) {
     if (!map || typeof overlays === 'undefined') return;
 
     const landslideKeys = Object.keys(overlays).filter(k => 
@@ -301,8 +414,14 @@ function setLandslideData(enabled, showNotice = false) {
         const layer = overlays[k];
         if (layer) {
             if (enabled) {
-                if (k.includes('MGB-HIGH') || k.includes('LIGTAS-LSDB')) {
+                if (k.includes('MGB-HIGH')) {
                     if (!map.hasLayer(layer)) map.addLayer(layer);
+                } else if (k.includes('LIGTAS-LSDB')) {
+                    if (includeLSDB) {
+                        if (!map.hasLayer(layer)) map.addLayer(layer);
+                    } else {
+                        if (map.hasLayer(layer)) map.removeLayer(layer);
+                    }
                 }
             } else {
                 if (map.hasLayer(layer)) map.removeLayer(layer);
@@ -313,8 +432,10 @@ function setLandslideData(enabled, showNotice = false) {
     // Update sidebar checkboxes if initialized
     document.querySelectorAll('.layer-toggle-input').forEach(cb => {
         const label = cb.nextElementSibling ? cb.nextElementSibling.innerText : '';
-        if (label.includes('LIGTAS-LSDB') || label.includes('MGB-HIGH')) {
+        if (label.includes('MGB-HIGH')) {
             cb.checked = enabled;
+        } else if (label.includes('LIGTAS-LSDB')) {
+            cb.checked = enabled && includeLSDB;
         } else if (!enabled && (label.includes('MGB') || label.includes('Susceptibility'))) {
             cb.checked = false;
         }
@@ -510,9 +631,11 @@ function updatePropertiesTable(layerName, properties) {
     }
 
     try {
+        const isSyncLayer = typeof synchronizedLayers !== 'undefined' && synchronizedLayers.some(sl => sl.name === layerName || (sl.targetAws && layerName.includes(sl.targetAws)));
         for (const [key, value] of Object.entries(properties)) {
             const kLower = String(key).toLowerCase().trim();
             if (['objectid', 'fid', 'shape_length', 'shape_area', 'id'].includes(kLower)) continue;
+            if (isSyncLayer && ['site id', 'site_id', 'site name', 'site_name', 'latitude', 'longitude', 'lat', 'long'].includes(kLower)) continue;
             const displayKey = formatPropertyName(key); let displayValue = formatPropertyValue(key, value);
             if (typeof displayValue === 'object' && displayValue !== null) displayValue = JSON.stringify(displayValue);
             const row = document.createElement('tr');
@@ -601,6 +724,13 @@ try {
     map.createPane('siteBoundaries');
     map.getPane('siteBoundaries').style.zIndex = 460;
     map.getPane('siteBoundaries').style.pointerEvents = 'none';
+
+    // Prevent clicks inside map-floating-notice from propagating to the map canvas
+    const errNotificationEl = document.getElementById('errorOverride');
+    if (errNotificationEl && typeof L !== 'undefined' && L.DomEvent) {
+        L.DomEvent.disableClickPropagation(errNotificationEl);
+        L.DomEvent.disableScrollPropagation(errNotificationEl);
+    }
 
     // Reset GeoJSON Highlight when map canvas is clicked directly & show raster popup if raster is active
     map.on('click', (e) => {
@@ -934,10 +1064,7 @@ try {
             c.style.backgroundColor = 'white'; c.style.width = '30px'; c.style.height = '30px'; c.style.cursor = 'pointer';
             c.innerHTML = '<span style="font-size:20px; line-height:30px; display:block; text-align:center;">🏠</span>'; c.title = "Reset View";
             c.onclick = () => {
-                if (typeof clearUserLocationAssessment === 'function') {
-                    clearUserLocationAssessment();
-                }
-                map.setView(initialCenter, initialZoom);
+                resetMapView();
             };
             return c;
         }
@@ -1044,17 +1171,90 @@ function getNearbyLandslideCount(latlng, radiusKm = 5) {
     return count;
 }
 
-function generateCombinedReport(layerName, properties, nearestStation, landslideCount) {
+function generateCombinedReport(layerName, properties, nearestStation, landslideCount, isSyncAWS = false) {
+    const isSyncLayer = isSyncAWS || (typeof synchronizedLayers !== 'undefined' && synchronizedLayers.some(sl => sl.name === layerName || (sl.targetAws && layerName.includes(sl.targetAws))));
     let susContent = '';
     const safeProps = properties || {};
-    for (const [key, value] of Object.entries(safeProps)) {
-        const kLower = String(key).toLowerCase().trim();
-        if (['objectid', 'fid', 'shape_length', 'shape_area', 'id'].includes(kLower)) continue;
-        const displayKey = formatPropertyName(key); let displayValue = formatPropertyValue(key, value);
-        if (typeof displayValue === 'string' && (displayValue.startsWith('http') || displayValue.startsWith('www'))) {
-             displayValue = `<a href="${displayValue}" target="_blank" style="color:var(--primary-color); text-decoration:none; font-weight:bold;">View Link 🔗</a>`;
+
+    if (isSyncLayer) {
+        // 1. Reorganize Section 1 for initSynchronizedAWSLayer:
+        // Exclude: Site ID, Site Name, Latitude, Longitude (and any raw sensor metadata)
+        // Include ONLY: LS Landslide Susceptibility based on layer attributes, followed by Region, Province, Municipality, and Barangay
+
+        // A. LS Landslide Susceptibility
+        let lsVal = '';
+        for (const [k, v] of Object.entries(safeProps)) {
+            const cleanKey = k.toLowerCase().replace(/[^a-z]/g, '');
+            if (cleanKey === 'ls' || cleanKey === 'landslide' || cleanKey.includes('suscept') || cleanKey === 'rating') {
+                lsVal = v;
+                break;
+            }
         }
-        susContent += `<tr><th>${displayKey}</th><td>${displayValue}</td></tr>`;
+        if (!lsVal && safeProps['LS']) lsVal = safeProps['LS'];
+        if (!lsVal && safeProps['Landslide ']) lsVal = safeProps['Landslide '];
+        if (!lsVal) lsVal = 'High Landslide Susceptibility';
+
+        // B. Region
+        let regVal = '';
+        for (const [k, v] of Object.entries(safeProps)) {
+            const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanKey === 'region' || cleanKey === 'reg' || cleanKey === 'name0' || cleanKey === 'adm1') {
+                regVal = v;
+                break;
+            }
+        }
+        if (!regVal) regVal = 'N/A';
+
+        // C. Province
+        let provVal = '';
+        for (const [k, v] of Object.entries(safeProps)) {
+            const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanKey === 'province' || cleanKey === 'prov' || cleanKey === 'name1' || cleanKey === 'adm2') {
+                provVal = v;
+                break;
+            }
+        }
+        if (!provVal) provVal = 'N/A';
+
+        // D. Municipality
+        let munVal = '';
+        for (const [k, v] of Object.entries(safeProps)) {
+            const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanKey === 'municipality' || cleanKey === 'municipali' || cleanKey === 'mun' || cleanKey === 'muni' || cleanKey === 'name2' || cleanKey === 'adm3') {
+                munVal = v;
+                break;
+            }
+        }
+        if (!munVal) munVal = 'N/A';
+
+        // E. Barangay
+        let brgyVal = '';
+        for (const [k, v] of Object.entries(safeProps)) {
+            const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanKey === 'barangay' || cleanKey === 'brgy' || cleanKey === 'name3' || cleanKey === 'adm4') {
+                brgyVal = v;
+                break;
+            }
+        }
+        if (!brgyVal) brgyVal = 'N/A';
+
+        susContent = `
+            <tr><th>LS Landslide Susceptibility</th><td><strong>${lsVal}</strong></td></tr>
+            <tr><th>Region</th><td>${regVal}</td></tr>
+            <tr><th>Province</th><td>${provVal}</td></tr>
+            <tr><th>Municipality</th><td>${munVal}</td></tr>
+            <tr><th>Barangay</th><td>${brgyVal}</td></tr>
+        `;
+    } else {
+        for (const [key, value] of Object.entries(safeProps)) {
+            const kLower = String(key).toLowerCase().trim();
+            if (['objectid', 'fid', 'shape_length', 'shape_area', 'id'].includes(kLower)) continue;
+            const displayKey = formatPropertyName(key); let displayValue = formatPropertyValue(key, value);
+            if (typeof displayValue === 'string' && (displayValue.startsWith('http') || displayValue.startsWith('www'))) {
+                 displayValue = `<a href="${displayValue}" target="_blank" style="color:var(--primary-color); text-decoration:none; font-weight:bold;">View Link 🔗</a>`;
+            }
+            susContent += `<tr><th>${displayKey}</th><td>${displayValue}</td></tr>`;
+        }
     }
 
     let stationContent = `
@@ -1099,7 +1299,7 @@ function generateCombinedReport(layerName, properties, nearestStation, landslide
     if (layerName === "User Location" || layerName.includes("GPS PROXIMITY")) {
         userLocationActions = `
             <div class="user-assessment-controls" style="margin: 8px 0 4px 0; display: flex; flex-direction: column; gap: 4px;">
-                <button class="filter-ls-btn" id="toggleMaskBtn" onclick="toggleLandslideMask()">
+                <button class="filter-ls-btn toggle-ls-mask-btn" id="toggleLs5kmMaskBtn" onclick="toggleLandslideMask()">
                     ${isLandslide5KmMaskActive ? '🌐 Show All Regional Landslides' : '🎯 Mask Landslides > 5km'}
                 </button>
                 <button class="filter-ls-btn outline" onclick="fitTo5KmBuffer()">
@@ -1115,11 +1315,13 @@ function generateCombinedReport(layerName, properties, nearestStation, landslide
     const popupHeaderTitle = (layerName === "User Location" || layerName.includes("GPS PROXIMITY")) ? 
         "GPS PROXIMITY LANDSLIDE RADAR" : "Generated Report";
 
+    const section1Title = isSyncLayer ? "1 LOCATION DETAILS (Barangay)" : `1. Location Details (${layerName})`;
+
     return `
         <div class="popup-container">
             <div class="popup-header">${popupHeaderTitle}</div>
             <div class="popup-scroll-container">
-                <div class="popup-section-title">1. Location Details (${layerName})</div>
+                <div class="popup-section-title">${section1Title}</div>
                 <table class="popup-table">${susContent}</table>
                 <div class="popup-section-title">2. Weather Status</div>
                 <table class="popup-table">${stationContent}</table>
@@ -1530,7 +1732,15 @@ function initSynchronizedAWSLayer(targetAwsName, geojsonUrl, layerDisplayName) {
                     fillOpacity: globalLayerOpacity 
                 }, 
                 onEachFeature: (feature, featureLayer) => { 
-                    featureLayer.bindPopup(`<b>${layerDisplayName}</b><br>Awaiting AWS synchronization...`, {
+                    const featureProps = (feature && feature.properties) ? feature.properties : {};
+                    const initialReport = generateCombinedReport(
+                        layerDisplayName,
+                        featureProps,
+                        null,
+                        0,
+                        true
+                    );
+                    featureLayer.bindPopup(initialReport, {
                         autoPan: false,
                         maxWidth: 360
                     }); 
@@ -1543,9 +1753,13 @@ function initSynchronizedAWSLayer(targetAwsName, geojsonUrl, layerDisplayName) {
                             L.DomEvent.stopPropagation(e);
                         }
                         highlightGeoJSONFeature(e.target);
-                        updatePropertiesTable(layerDisplayName, (feature && feature.properties) ? feature.properties : {});
+                        updatePropertiesTable(layerDisplayName, featureProps);
                         const clickLatLng = (e && e.latlng) ? e.latlng : (featureLayer.getBounds ? featureLayer.getBounds().getCenter() : (featureLayer.getLatLng ? featureLayer.getLatLng() : null));
                         if (clickLatLng) {
+                            const nearStation = findPriorityStationNearby(clickLatLng, 20);
+                            const currentLs = getNearbyLandslideCount(clickLatLng, 5);
+                            const freshReport = generateCombinedReport(layerDisplayName, featureProps, nearStation, currentLs, true);
+                            featureLayer.setPopupContent(freshReport);
                             featureLayer.openPopup(clickLatLng);
                             focusMapOnPopup(clickLatLng);
                         } else {
@@ -1682,7 +1896,8 @@ function syncSingleAwsLayer(layerData) {
             layerData.name, 
             featureProps, 
             finalStationDisplay, 
-            lsCount
+            lsCount,
+            true
         );
 
         featureLayer.bindPopup(reportContent, {
@@ -1703,6 +1918,10 @@ function syncSingleAwsLayer(layerData) {
             updatePropertiesTable(layerData.name, featureProps);
             const clickLatLng = (e && e.latlng) ? e.latlng : (featureLayer.getBounds ? featureLayer.getBounds().getCenter() : (featureLayer.getLatLng ? featureLayer.getLatLng() : null));
             if (clickLatLng) {
+                const currentNearStation = findPriorityStationNearby(clickLatLng, 20) || finalStationDisplay;
+                const currentLsCount = getNearbyLandslideCount(clickLatLng, 5);
+                const freshReport = generateCombinedReport(layerData.name, featureProps, currentNearStation, currentLsCount, true);
+                featureLayer.setPopupContent(freshReport);
                 featureLayer.openPopup(clickLatLng);
                 focusMapOnPopup(clickLatLng);
             } else {
@@ -2224,6 +2443,14 @@ if (defaultLayersBtn) {
             if (isDefault && !input.checked) input.click();
             if (!isDefault && input.checked) input.click();
         });
+    });
+}
+
+// --- RESET MAP VIEW BUTTON ---
+const resetMapViewBtn = document.getElementById('resetMapViewBtn');
+if (resetMapViewBtn) {
+    resetMapViewBtn.addEventListener('click', () => {
+        resetMapView();
     });
 }
 
@@ -2835,23 +3062,23 @@ if (promptEffectsToggle) {
     });
 }
 
-function applyPromptSettings() {
+function applyPromptSettings(includeLSDB = false) {
     const enableLandslide = promptLandslideToggle ? promptLandslideToggle.checked : true;
     const enableEffects = promptEffectsToggle ? promptEffectsToggle.checked : false;
 
     if (enableLandslide) {
-        setLandslideData(true, false);
+        setLandslideData(true, false, includeLSDB);
     } else if (enableEffects) {
         setVisualEffects(true, false);
     } else {
-        setLandslideData(false, false);
+        setLandslideData(false, false, false);
         setVisualEffects(false, false);
     }
 }
 
 if (promptAssessBtn) {
     promptAssessBtn.addEventListener('click', () => {
-        applyPromptSettings();
+        applyPromptSettings(true);
         dismissLocationPrompt();
         assessUserLocation();
     });
@@ -2859,28 +3086,33 @@ if (promptAssessBtn) {
 
 if (promptBrowseBtn) {
     promptBrowseBtn.addEventListener('click', () => {
-        applyPromptSettings();
+        // Hide the landslide points LSDB by default when user clicks to continue browsing map to reduce map lag
+        applyPromptSettings(false);
+        hideLandslidePointsLSDB();
         dismissLocationPrompt();
     });
 }
 
 if (closeLocationPromptBtn) {
     closeLocationPromptBtn.addEventListener('click', () => {
-        applyPromptSettings();
+        applyPromptSettings(false);
+        hideLandslidePointsLSDB();
         dismissLocationPrompt();
     });
 }
 
 window.addEventListener('click', (e) => {
     if (e.target === locationPromptModal) {
-        applyPromptSettings();
+        applyPromptSettings(false);
+        hideLandslidePointsLSDB();
         dismissLocationPrompt();
     }
 });
 
 window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && locationPromptModal && locationPromptModal.style.display === 'flex') {
-        applyPromptSettings();
+        applyPromptSettings(false);
+        hideLandslidePointsLSDB();
         dismissLocationPrompt();
     }
 });
