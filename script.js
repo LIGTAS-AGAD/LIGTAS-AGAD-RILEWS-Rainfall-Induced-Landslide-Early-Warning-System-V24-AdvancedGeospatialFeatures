@@ -858,7 +858,7 @@ try {
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri', opacity: 0.5, pane: 'topTiles' })
         ])
     };
-    baseLayersData["Hybrid"].addTo(map);
+    baseLayersData["Streets"].addTo(map);
 
     L.control.scale().addTo(map); L.control.locate().addTo(map);
     
