@@ -93,9 +93,11 @@ let userAccuracyCircle = null;
 let user5KmBufferCircle = null;
 let userRadarRangeRing = null;
 let detectedLandslidePingsGroup = null;
+let radarNearbyLandslidesGroup = null;
 let userAssessmentActive = false;
 let userAssessmentLatLng = null;
 let isLandslide5KmMaskActive = false;
+let isGpsLocating = false;
 
 // Safe global overlay dictionary
 var overlays = overlays || {};
@@ -114,11 +116,22 @@ function applyLandslide5KmMask(centerLatLng) {
     isLandslide5KmMaskActive = true;
 
     const lsLayer = getLandslidesLayer();
-    if (!lsLayer) return;
 
-    // Ensure the layer is displayed on the map so points within 5km are visible
-    if (map && !map.hasLayer(lsLayer)) {
-        map.addLayer(lsLayer);
+    // PERFORMANCE & WEBKIT CRASH FIX:
+    // Do NOT render all 8,000 regional markers to the map while 5km proximity radar is active.
+    // Removing the 8,000-marker regional layer frees up memory and prevents WebKit SVG invalidation crashes.
+    if (lsLayer && map && map.hasLayer(lsLayer)) {
+        map.removeLayer(lsLayer);
+    }
+
+    // Initialize or reset the dedicated nearby landslide layer group
+    if (!radarNearbyLandslidesGroup && map) {
+        radarNearbyLandslidesGroup = L.layerGroup().addTo(map);
+    } else if (radarNearbyLandslidesGroup) {
+        radarNearbyLandslidesGroup.clearLayers();
+        if (map && !map.hasLayer(radarNearbyLandslidesGroup)) {
+            radarNearbyLandslidesGroup.addTo(map);
+        }
     }
 
     // Initialize or reset the detected radar pings layer group
@@ -132,33 +145,69 @@ function applyLandslide5KmMask(centerLatLng) {
     }
 
     let visibleCount = 0;
-    let maskedCount = 0;
 
-    lsLayer.eachLayer(marker => {
-        if (!marker.getLatLng) return;
-        const mLatLng = marker.getLatLng();
+    // Retrieve features either from landslideFeatures array or GeoJSON layer
+    const candidateFeatures = (typeof landslideFeatures !== 'undefined' && landslideFeatures && landslideFeatures.length > 0)
+        ? landslideFeatures
+        : (lsLayer && lsLayer.toGeoJSON ? (lsLayer.toGeoJSON().features || []) : []);
+
+    candidateFeatures.forEach(feature => {
+        if (!feature.geometry || feature.geometry.type !== 'Point') return;
+        const coords = feature.geometry.coordinates;
+        if (!coords || coords.length < 2) return;
+        const mLatLng = L.latLng(coords[1], coords[0]);
         const distMeters = normCenter.distanceTo(mLatLng);
 
         if (distMeters <= 5000) {
             visibleCount++;
-            marker.setStyle({
+
+            // Create high-visibility detected landslide marker
+            const marker = L.circleMarker(mLatLng, {
                 color: '#ef4444',
                 fillColor: '#ea580c',
                 fillOpacity: 0.95,
                 radius: 7.5,
                 weight: 2.2,
                 opacity: 1,
-                className: 'detected-landslide-marker'
+                className: 'detected-landslide-marker',
+                pane: 'markerPane'
             });
-            if (marker._path) {
-                marker._path.style.display = '';
-                marker._path.style.pointerEvents = 'auto';
-                marker._path.classList.add('detected-landslide-marker');
+
+            marker.bindPopup(generateLandslidePointReport(feature, mLatLng), {
+                autoPan: false,
+                maxWidth: 360
+            });
+
+            marker.on('click', (e) => {
+                if (e.originalEvent) e.originalEvent._stopped = true;
+                const clickPt = e.latlng || mLatLng;
+                const freshReport = generateLandslidePointReport(feature, clickPt);
+                marker.setPopupContent(freshReport);
+
+                const p = feature.properties || {};
+                const yr = p['Year'] || p['YYYY-MM-DD'] || 'N/A';
+                const loc = p['LANDSLID_2'] || 'N/A';
+                const nearAWS = findPriorityStationNearby(clickPt, 20);
+
+                const conciseProps = {
+                    "Incident Type": "Recorded Historical Landslide",
+                    "Event Year": yr,
+                    "Location (LANDSLID_2)": loc,
+                    "Nearest AWS Station": nearAWS ? `${nearAWS.StationName || nearAWS.Station} (${nearAWS.distance} km)` : "None nearby (>20km)",
+                    "Weather Warning Level": nearAWS ? `Level ${nearAWS.RainfallLandslidethresholdwarninglevel}` : "N/A",
+                    "Recommended Action": nearAWS ? (nearAWS.Recommendedactions || "Monitor") : "Monitor Local Advisories"
+                };
+                updatePropertiesTable("Recorded Landslide Incident", conciseProps);
+                focusMapOnPopup(clickPt);
+            });
+
+            if (radarNearbyLandslidesGroup) {
+                radarNearbyLandslidesGroup.addLayer(marker);
             }
 
-            // Add radar contact expanding ping wave animation on detected nearby landslide
-            if (detectedLandslidePingsGroup) {
-                const delaySec = ((visibleCount % 5) * 0.35).toFixed(2);
+            // Add radar contact expanding ping wave animation (cap to nearest 10 for mobile WebKit performance)
+            if (visibleCount <= 10 && detectedLandslidePingsGroup) {
+                const delaySec = (((visibleCount - 1) % 5) * 0.35).toFixed(2);
                 const pingMarker = L.marker(mLatLng, {
                     icon: L.divIcon({
                         className: 'detected-ls-ping-icon',
@@ -171,57 +220,33 @@ function applyLandslide5KmMask(centerLatLng) {
                 });
                 detectedLandslidePingsGroup.addLayer(pingMarker);
             }
-        } else {
-            maskedCount++;
-            marker.setStyle({
-                color: 'transparent',
-                fillColor: 'transparent',
-                fillOpacity: 0,
-                radius: 0,
-                weight: 0,
-                opacity: 0,
-                className: ''
-            });
-            if (marker._path) {
-                marker._path.style.display = 'none';
-                marker._path.style.pointerEvents = 'none';
-                marker._path.classList.remove('detected-landslide-marker');
-            }
-            if (marker.isPopupOpen && marker.isPopupOpen()) {
-                marker.closePopup();
-            }
         }
     });
 
-    console.log(`[5km Mask] Applied: ${visibleCount} landslides within 5km radius, ${maskedCount} masked.`);
+    console.log(`[5km Mask] Applied: ${visibleCount} landslides within 5km radius.`);
     updateMaskButtonUI(true);
 }
 
 function clearLandslide5KmMask() {
     isLandslide5KmMaskActive = false;
+    if (radarNearbyLandslidesGroup) {
+        radarNearbyLandslidesGroup.clearLayers();
+        if (map && map.hasLayer(radarNearbyLandslidesGroup)) {
+            map.removeLayer(radarNearbyLandslidesGroup);
+        }
+    }
     if (detectedLandslidePingsGroup) {
         detectedLandslidePingsGroup.clearLayers();
-    }
-    const lsLayer = getLandslidesLayer();
-    if (!lsLayer) return;
-
-    lsLayer.eachLayer(marker => {
-        if (!marker.getLatLng) return;
-        marker.setStyle({
-            color: 'orange',
-            fillColor: 'orange',
-            fillOpacity: 0.8,
-            radius: 6,
-            weight: 1,
-            opacity: 1,
-            className: ''
-        });
-        if (marker._path) {
-            marker._path.style.display = '';
-            marker._path.style.pointerEvents = 'auto';
-            marker._path.classList.remove('detected-landslide-marker');
+        if (map && map.hasLayer(detectedLandslidePingsGroup)) {
+            map.removeLayer(detectedLandslidePingsGroup);
         }
-    });
+    }
+
+    // Restore full regional landslide layer if user requests to see all regional landslides
+    const lsLayer = getLandslidesLayer();
+    if (lsLayer && map && !map.hasLayer(lsLayer)) {
+        map.addLayer(lsLayer);
+    }
 
     updateMaskButtonUI(false);
 }
@@ -229,19 +254,15 @@ function clearLandslide5KmMask() {
 function refreshLandslideMaskDisplay() {
     if (!isLandslide5KmMaskActive || !userAssessmentLatLng) return;
     const lsLayer = getLandslidesLayer();
-    if (!lsLayer || !map || !map.hasLayer(lsLayer)) return;
-
-    lsLayer.eachLayer(marker => {
-        if (!marker.getLatLng || !marker._path) return;
-        const dist = userAssessmentLatLng.distanceTo(marker.getLatLng());
-        if (dist > 5000) {
-            marker._path.style.display = 'none';
-            marker._path.style.pointerEvents = 'none';
-        } else {
-            marker._path.style.display = '';
-            marker._path.style.pointerEvents = 'auto';
-        }
-    });
+    if (lsLayer && map && map.hasLayer(lsLayer)) {
+        map.removeLayer(lsLayer);
+    }
+    if (radarNearbyLandslidesGroup && map && !map.hasLayer(radarNearbyLandslidesGroup)) {
+        map.addLayer(radarNearbyLandslidesGroup);
+    }
+    if (detectedLandslidePingsGroup && map && !map.hasLayer(detectedLandslidePingsGroup)) {
+        map.addLayer(detectedLandslidePingsGroup);
+    }
 }
 
 function toggleLandslideMask() {
@@ -353,7 +374,14 @@ function focusMapOnPopup(latlng, targetZoom = null) {
         const offsetPt = pt.subtract([0, 140]);
         const offsetLatLng = map.unproject(offsetPt, destZoom);
         
-        map.flyTo(offsetLatLng, destZoom, { animate: true, duration: 0.6 });
+        const zoomDelta = Math.abs(currentZoom - destZoom);
+        const animDuration = zoomDelta > 3 ? 0.9 : 0.6;
+        
+        map.flyTo(offsetLatLng, destZoom, { 
+            animate: true, 
+            duration: animDuration,
+            easeLinearity: 0.25
+        });
     } catch (err) {
         console.error("Error focusing on popup:", err);
     }
@@ -384,6 +412,12 @@ function setVisualEffects(enabled, showNotice = false) {
 }
 
 function hideLandslidePointsLSDB() {
+    if (radarNearbyLandslidesGroup && map) {
+        radarNearbyLandslidesGroup.clearLayers();
+        if (map.hasLayer(radarNearbyLandslidesGroup)) {
+            map.removeLayer(radarNearbyLandslidesGroup);
+        }
+    }
     if (detectedLandslidePingsGroup && map) {
         detectedLandslidePingsGroup.clearLayers();
         if (map.hasLayer(detectedLandslidePingsGroup)) {
@@ -462,15 +496,29 @@ function setLandslideData(enabled, showNotice = false, includeLSDB = false) {
 
 function gpsProximityLandslideRadar() {
     hasPromptedLocation = true;
-    if (map) { 
-        showLoadingScreen("Acquiring GPS Signal for GPS PROXIMITY LANDSLIDE RADAR (5km)..."); 
+    if (!map) return;
+
+    if (isGpsLocating) {
+        showError("GPS acquisition already in progress. Please wait...", "info");
+        return;
+    }
+    isGpsLocating = true;
+
+    // Show non-blocking status notification that doesn't freeze the WebKit compositor
+    showError("📡 Acquiring GPS Signal for GPS PROXIMITY LANDSLIDE RADAR (5km)...", "info");
+
+    try {
         map.locate({ 
             setView: false, 
             maxZoom: 17, 
             enableHighAccuracy: true, 
-            timeout: 15000,
-            maximumAge: 0
+            timeout: 12000,
+            maximumAge: 30000
         }); 
+    } catch (err) {
+        isGpsLocating = false;
+        console.error("GPS locate call failed:", err);
+        showError("Could not initiate GPS location on this browser.", "warning");
     }
 }
 const assessUserLocation = gpsProximityLandslideRadar;
@@ -882,183 +930,192 @@ try {
     }
 
     map.on('locationfound', function(e) {
+        isGpsLocating = false;
         hideLoadingScreen(); 
-        const latlng = e.latlng;
-        const accuracyMeters = Math.round(e.accuracy || 0);
 
-        // Remove previous GPS marker, accuracy circle, and 5km buffer circle if any
-        if (userLocationMarker) {
-            map.removeLayer(userLocationMarker);
-            userLocationMarker = null;
-        }
-        if (userAccuracyCircle) {
-            map.removeLayer(userAccuracyCircle);
-            userAccuracyCircle = null;
-        }
-        if (user5KmBufferCircle) {
-            map.removeLayer(user5KmBufferCircle);
-            user5KmBufferCircle = null;
-        }
-        if (userRadarRangeRing) {
-            map.removeLayer(userRadarRangeRing);
-            userRadarRangeRing = null;
-        }
+        try {
+            const latlng = e.latlng;
+            const accuracyMeters = Math.round(e.accuracy || 0);
 
-        // Draw accuracy circle with high-visibility cyan radar perimeter (Refined)
-        userAccuracyCircle = L.circle(latlng, {
-            radius: Math.max(accuracyMeters, 5),
-            color: 'rgba(0, 255, 255, 0.75)',
-            fillColor: '#00ffff',
-            fillOpacity: 0.05,
-            weight: 1.5,
-            dashArray: '5, 5',
-            className: 'cyan-accuracy-circle'
-        }).addTo(map);
-
-        userAccuracyCircle.bindTooltip(`📍 GPS Accuracy: ±${accuracyMeters} meters`, {
-            direction: 'top',
-            offset: [0, -5],
-            className: 'cyan-accuracy-tooltip'
-        });
-
-        // High-tech Cyan Radar Beacon with sweeping cone and multi-stage wave pulses
-        const userIcon = L.divIcon({
-            className: 'user-location-marker-container cyan-radar-mode',
-            html: `
-                <div class="user-location-radar-sweep"></div>
-                <div class="user-location-pulse-ring ring-1"></div>
-                <div class="user-location-pulse-ring ring-2"></div>
-                <div class="user-location-pulse-ring ring-3"></div>
-                <div class="user-location-dot">
-                    <div class="user-location-dot-core"></div>
-                </div>
-            `,
-            iconSize: [60, 60],
-            iconAnchor: [30, 30],
-            popupAnchor: [0, -26]
-        });
-
-        userLocationMarker = L.marker(latlng, {
-            icon: userIcon,
-            zIndexOffset: 2000,
-            title: `Your Location (±${accuracyMeters}m)`
-        }).addTo(map);
-
-        const priorityStation = findPriorityStationNearby(latlng, 20); 
-        const lsCount = getNearbyLandslideCount(latlng, 5); 
-
-        // Draw 5km Assessment Zone Cyan Radar Buffer Circle (5km Radius, Zero-Lag Lightweight)
-        user5KmBufferCircle = L.circle(latlng, {
-            radius: 5000,
-            color: '#00e5ff',
-            fillColor: '#00e5ff',
-            fillOpacity: 0.035,
-            weight: 1.6,
-            dashArray: '6, 6',
-            className: 'user-5km-buffer-zone',
-            interactive: true
-        }).addTo(map);
-
-        user5KmBufferCircle.bindTooltip(`📡 GPS PROXIMITY LANDSLIDE RADAR (5km Buffer): ${lsCount} detected`, {
-            direction: 'top',
-            offset: [0, -10],
-            className: 'buffer-5km-tooltip'
-        });
-
-        // Concentric 2.5km inner range ring for tactical radar display (Zero-Lag)
-        userRadarRangeRing = L.circle(latlng, {
-            radius: 2500,
-            color: 'rgba(0, 229, 255, 0.3)',
-            fillColor: 'transparent',
-            fillOpacity: 0,
-            weight: 1,
-            dashArray: '4, 4',
-            className: 'user-radar-range-ring',
-            interactive: false
-        }).addTo(map);
-
-        user5KmBufferCircle.on('click', () => {
+            // Remove previous GPS marker, accuracy circle, and buffer circles if any
             if (userLocationMarker) {
-                focusMapOnPopup(latlng);
-                userLocationMarker.openPopup();
+                map.removeLayer(userLocationMarker);
+                userLocationMarker = null;
             }
-        });
+            if (userAccuracyCircle) {
+                map.removeLayer(userAccuracyCircle);
+                userAccuracyCircle = null;
+            }
+            if (user5KmBufferCircle) {
+                map.removeLayer(user5KmBufferCircle);
+                user5KmBufferCircle = null;
+            }
+            if (userRadarRangeRing) {
+                map.removeLayer(userRadarRangeRing);
+                userRadarRangeRing = null;
+            }
 
-        // Mask out distant landslides and keep only landslides within 5km
-        applyLandslide5KmMask(latlng);
+            // Draw accuracy circle with high-visibility cyan radar perimeter (GPU-safe)
+            userAccuracyCircle = L.circle(latlng, {
+                radius: Math.max(accuracyMeters, 5),
+                color: 'rgba(0, 255, 255, 0.75)',
+                fillColor: '#00ffff',
+                fillOpacity: 0.05,
+                weight: 1.5,
+                dashArray: '5, 5',
+                className: 'cyan-accuracy-circle',
+                pane: 'overlayPane'
+            }).addTo(map);
 
-        // Accuracy classification badge
-        let accuracyBadge = '';
-        if (accuracyMeters <= 25) {
-            accuracyBadge = `<span class="accuracy-pill accuracy-high">🟢 High (±${accuracyMeters} m)</span>`;
-        } else if (accuracyMeters <= 100) {
-            accuracyBadge = `<span class="accuracy-pill accuracy-med">🟡 Fair (±${accuracyMeters} m)</span>`;
-        } else {
-            accuracyBadge = `<span class="accuracy-pill accuracy-low">🔴 Approx (±${accuracyMeters} m)</span>`;
-        }
+            userAccuracyCircle.bindTooltip(`📍 GPS Accuracy: ±${accuracyMeters} meters`, {
+                direction: 'top',
+                offset: [0, -5],
+                className: 'cyan-accuracy-tooltip'
+            });
 
-        const userProperties = {
-            "Location Type": "📍 GPS Detected Location",
-            "Latitude": `${latlng.lat.toFixed(6)}°`,
-            "Longitude": `${latlng.lng.toFixed(6)}°`,
-            "GPS Accuracy": `±${accuracyMeters} meters`,
-            "Signal Precision": accuracyBadge
-        };
+            // Modern, lightweight Cyan Radar Beacon (Hardware-Accelerated & WebKit-Safe)
+            const userIcon = L.divIcon({
+                className: 'user-location-marker-container cyan-radar-mode',
+                html: `
+                    <div class="user-location-radar-sweep"></div>
+                    <div class="user-location-pulse-ring ring-1"></div>
+                    <div class="user-location-pulse-ring ring-2"></div>
+                    <div class="user-location-dot">
+                        <div class="user-location-dot-core"></div>
+                    </div>
+                `,
+                iconSize: [60, 60],
+                iconAnchor: [30, 30],
+                popupAnchor: [0, -26]
+            });
 
-        const reportContent = generateCombinedReport("GPS PROXIMITY LANDSLIDE RADAR", userProperties, priorityStation, lsCount);
+            userLocationMarker = L.marker(latlng, {
+                icon: userIcon,
+                zIndexOffset: 2000,
+                title: `Your Location (±${accuracyMeters}m)`
+            }).addTo(map);
 
-        if (typeof isWatchingAlerts !== 'undefined' && isWatchingAlerts) {
-            checkAndTriggerMobileNotification(priorityStation);
-        }
+            const priorityStation = findPriorityStationNearby(latlng, 20); 
+            const lsCount = getNearbyLandslideCount(latlng, 5); 
 
-        userLocationMarker.bindPopup(reportContent, {
-            autoPan: true,
-            autoPanPaddingTopLeft: [40, 70],
-            autoPanPaddingBottomRight: [40, 40],
-            maxWidth: 360,
-            className: 'user-location-popup'
-        });
+            // Draw 5km Assessment Zone Cyan Radar Buffer Circle
+            user5KmBufferCircle = L.circle(latlng, {
+                radius: 5000,
+                color: '#00e5ff',
+                fillColor: '#00e5ff',
+                fillOpacity: 0.035,
+                weight: 1.6,
+                dashArray: '6, 6',
+                className: 'user-5km-buffer-zone',
+                interactive: true
+            }).addTo(map);
 
-        userLocationMarker.on('click', () => {
+            user5KmBufferCircle.bindTooltip(`📡 GPS PROXIMITY LANDSLIDE RADAR (5km Buffer): ${lsCount} detected`, {
+                direction: 'top',
+                offset: [0, -10],
+                className: 'buffer-5km-tooltip'
+            });
+
+            // Concentric 2.5km inner range ring for tactical radar display
+            userRadarRangeRing = L.circle(latlng, {
+                radius: 2500,
+                color: 'rgba(0, 229, 255, 0.3)',
+                fillColor: 'transparent',
+                fillOpacity: 0,
+                weight: 1,
+                dashArray: '4, 4',
+                className: 'user-radar-range-ring',
+                interactive: false
+            }).addTo(map);
+
+            user5KmBufferCircle.on('click', () => {
+                if (userLocationMarker) {
+                    focusMapOnPopup(latlng);
+                    userLocationMarker.openPopup();
+                }
+            });
+
+            // Mask out distant landslides and populate nearby radar landslides
+            applyLandslide5KmMask(latlng);
+
+            // Accuracy classification badge
+            let accuracyBadge = '';
+            if (accuracyMeters <= 25) {
+                accuracyBadge = `<span class="accuracy-pill accuracy-high">🟢 High (±${accuracyMeters} m)</span>`;
+            } else if (accuracyMeters <= 100) {
+                accuracyBadge = `<span class="accuracy-pill accuracy-med">🟡 Fair (±${accuracyMeters} m)</span>`;
+            } else {
+                accuracyBadge = `<span class="accuracy-pill accuracy-low">🔴 Approx (±${accuracyMeters} m)</span>`;
+            }
+
+            const userProperties = {
+                "Location Type": "📍 GPS Detected Location",
+                "Latitude": `${latlng.lat.toFixed(6)}°`,
+                "Longitude": `${latlng.lng.toFixed(6)}°`,
+                "GPS Accuracy": `±${accuracyMeters} meters`,
+                "Signal Precision": accuracyBadge
+            };
+
+            const reportContent = generateCombinedReport("GPS PROXIMITY LANDSLIDE RADAR", userProperties, priorityStation, lsCount);
+
+            if (typeof isWatchingAlerts !== 'undefined' && isWatchingAlerts) {
+                checkAndTriggerMobileNotification(priorityStation);
+            }
+
+            // CRITICAL FOR SAFARI / ALL BROWSERS: autoPan: false prevents animation collision with flyTo
+            userLocationMarker.bindPopup(reportContent, {
+                autoPan: false,
+                maxWidth: 360,
+                className: 'user-location-popup'
+            });
+
+            // Determine optimal zoom level based on accuracy
+            const targetZoom = accuracyMeters < 100 ? 16 : (accuracyMeters < 500 ? 15 : 14);
+
+            userLocationMarker.on('click', () => {
+                focusMapOnPopup(latlng, targetZoom);
+            });
+
+            // Smoothly fly and focus map directly on user location
             focusMapOnPopup(latlng, targetZoom);
-        });
 
-        // Determine optimal zoom level based on accuracy
-        const targetZoom = accuracyMeters < 100 ? 16 : (accuracyMeters < 500 ? 15 : 14);
+            // Open popup cleanly AFTER map movement completes
+            let popupOpened = false;
+            const openPopupSafely = () => {
+                if (popupOpened) return;
+                popupOpened = true;
+                if (userLocationMarker) {
+                    userLocationMarker.openPopup();
+                }
+            };
 
-        // Smoothly fly and focus map directly on user location with upward offset for fixed header
-        focusMapOnPopup(latlng, targetZoom);
+            map.once('moveend', () => {
+                setTimeout(openPopupSafely, 200);
+            });
+            setTimeout(openPopupSafely, 1500); // Reliable fallback if moveend finished early
 
-        let popupOpened = false;
-        const openPopupSafely = () => {
-            if (popupOpened) return;
-            popupOpened = true;
-            if (userLocationMarker) {
-                userLocationMarker.openPopup();
-            }
-        };
-
-        map.once('moveend', () => {
-            setTimeout(openPopupSafely, 150);
-        });
-        setTimeout(openPopupSafely, 1400); // Reliable fallback
-
-        updatePropertiesTable("GPS PROXIMITY LANDSLIDE RADAR", userProperties);
+            updatePropertiesTable("GPS PROXIMITY LANDSLIDE RADAR", userProperties);
+            showError(`📍 GPS Signal Locked: ${lsCount} landslide(s) within 5km radius`, "info");
+        } catch (err) {
+            console.error("Error processing locationfound:", err);
+            showError("GPS location acquired, but an error occurred updating map layers.", "warning");
+        }
     });
     
     map.on('locationerror', function(e) { 
+        isGpsLocating = false;
         hideLoadingScreen(); 
         showError("Could not acquire GPS location: " + (e.message || "Permission denied or unavailable"), 'warning'); 
     });
 
     map.on('overlayremove', (e) => {
-        if (e.name && e.name.includes('LIGTAS-LSDB') && detectedLandslidePingsGroup) {
-            detectedLandslidePingsGroup.clearLayers();
+        if (e.name && e.name.includes('LIGTAS-LSDB')) {
+            if (detectedLandslidePingsGroup) detectedLandslidePingsGroup.clearLayers();
+            if (radarNearbyLandslidesGroup) radarNearbyLandslidesGroup.clearLayers();
         }
     });
     map.on('overlayadd', (e) => {
         if (e.name && e.name.includes('LIGTAS-LSDB') && isLandslide5KmMaskActive && userAssessmentLatLng) {
-            refreshLandslideMaskDisplay();
             applyLandslide5KmMask(userAssessmentLatLng);
         }
     });
