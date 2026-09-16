@@ -10,6 +10,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-search@3.0.2/dist/leaflet-search.min.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="./style.css">
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -65,7 +69,7 @@
             <div class="button-group-container">
                 <span class="group-label">TOOLS</span>
                 <div class="button-pod">
-                    <button class="nav-btn btn-warning" id="assessLocationBtn">Assess Location</button>
+                    <button class="nav-btn btn-warning" id="assessLocationBtn" title="GPS Proximity Landslide Radar (5km Radius)">📡 GPS PROXIMITY LANDSLIDE RADAR</button>
                      <button class="nav-btn" onclick="window.open('https://script.google.com/macros/s/AKfycbz5_G7ghXnc_k1vPKDVZA4VTCvf57YpK4PxULBT0GJM6Jhd_EBxObg4a2-EZkNSct8/exec', '_blank')">Detect Landslides</button>
                 </div>
             </div>
@@ -300,6 +304,79 @@
 
             <div style="text-align: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
                 <button id="downloadAwsAdvisoriesPdfBtn" class="nav-btn btn-danger" style="padding: 8px 25px; font-size: 1rem;">📥 Download Table as PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Location Assessment Onboarding Prompt Modal -->
+    <div id="locationPromptModal" class="ui-modal" role="dialog" aria-modal="true" aria-labelledby="locationPromptTitle">
+        <div class="ui-modal-content location-prompt-content">
+            <span class="close-ui-modal" id="closeLocationPromptBtn" title="Dismiss and Continue Browsing">&times;</span>
+            <div class="location-prompt-icon-badge">
+                <span class="prompt-pulse-ring"></span>
+                <span class="prompt-pulse-ring prompt-pulse-ring-2"></span>
+                <span class="prompt-icon">📍</span>
+            </div>
+            <h3 id="locationPromptTitle" class="location-prompt-title">GPS PROXIMITY LANDSLIDE RADAR</h3>
+            <p class="location-prompt-subtitle">
+                Scan and detect historical landslides and synchronized AWS weather hazards within a 5km proximity buffer radius of your current location.
+            </p>
+
+            <!-- System Performance & Map Data Configuration -->
+            <div class="prompt-perf-section">
+                <div class="prompt-perf-header">
+                    <span class="perf-badge">⚡ SYSTEM PERFORMANCE SETTINGS</span>
+                </div>
+                
+                <div class="prompt-toggle-row">
+                    <div class="toggle-card" id="cardLandslide">
+                        <div class="toggle-header">
+                            <span class="toggle-icon">⛰️</span>
+                            <div class="toggle-label-wrap">
+                                <strong>Landslide Data</strong>
+                                <span>MGB & LSDB Hazards</span>
+                            </div>
+                        </div>
+                        <label class="switch-toggle" title="Toggle Landslide Data">
+                            <input type="checkbox" id="promptLandslideToggle" checked>
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="toggle-card" id="cardEffects">
+                        <div class="toggle-header">
+                            <span class="toggle-icon">✨</span>
+                            <div class="toggle-label-wrap">
+                                <strong>Visual Effects</strong>
+                                <span>Pulsing Rings & Flash</span>
+                            </div>
+                        </div>
+                        <label class="switch-toggle" title="Toggle Visual Effects">
+                            <input type="checkbox" id="promptEffectsToggle">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="promptPerfNotice" class="prompt-perf-notice">
+                    ⚡ <strong>Performance Optimized:</strong> Visual effects are automatically disabled when Landslide Data is active to prevent lag.
+                </div>
+            </div>
+
+            <div class="location-prompt-actions">
+                <button id="promptAssessBtn" class="nav-btn btn-assess-pulse">
+                    📡 Activate GPS Proximity Landslide Radar (5km)
+                </button>
+                <button id="promptBrowseBtn" class="nav-btn btn-continue-browse">
+                    🗺️ Continue Browsing Map
+                </button>
+            </div>
+
+            <div class="location-prompt-footer">
+                <label class="prompt-remember-label">
+                    <input type="checkbox" id="promptRememberChoice">
+                    <span>Don't ask again this session</span>
+                </label>
             </div>
         </div>
     </div>
