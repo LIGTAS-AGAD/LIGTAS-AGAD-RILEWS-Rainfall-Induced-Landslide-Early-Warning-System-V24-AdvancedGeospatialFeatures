@@ -1213,7 +1213,7 @@ body.dark-mode .popup-actions {
     overflow: visible;
 }
 
-/* 360-degree continuous sweeping cyan radar beam (Hardware-Accelerated & Lightweight) */
+/* 360-degree continuous sweeping cyan radar beam (Hardware-Accelerated & WebKit-Safe) */
 .user-location-radar-sweep {
     position: absolute;
     top: 50%;
@@ -1231,9 +1231,18 @@ body.dark-mode .popup-actions {
         transparent 360deg
     );
     animation: cyanRadarSweep 2.8s linear infinite;
+    -webkit-animation: cyanRadarSweep 2.8s linear infinite;
     pointer-events: none;
     will-change: transform;
     transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+@-webkit-keyframes cyanRadarSweep {
+    0% { -webkit-transform: rotate(0deg) translateZ(0); transform: rotate(0deg) translateZ(0); }
+    100% { -webkit-transform: rotate(360deg) translateZ(0); transform: rotate(360deg) translateZ(0); }
 }
 
 @keyframes cyanRadarSweep {
@@ -1241,7 +1250,7 @@ body.dark-mode .popup-actions {
     100% { transform: rotate(360deg) translateZ(0); }
 }
 
-/* Multi-stage expanding cyan ripple wave rings (Lightweight GPU-composited) */
+/* Multi-stage expanding cyan ripple wave rings (Lightweight GPU-composited, 2-Ring WebKit-Safe) */
 .user-location-pulse-ring {
     position: absolute;
     top: 50%;
@@ -1254,34 +1263,54 @@ body.dark-mode .popup-actions {
     background: rgba(0, 229, 255, 0.03);
     border: 1.2px solid rgba(0, 229, 255, 0.55);
     animation: cyanRadarPulse 2.8s infinite cubic-bezier(0.2, 0.8, 0.2, 1);
+    -webkit-animation: cyanRadarPulse 2.8s infinite cubic-bezier(0.2, 0.8, 0.2, 1);
     pointer-events: none;
     will-change: transform, opacity;
     transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
 }
 
 .user-location-pulse-ring.ring-1 {
     animation-delay: 0s;
+    -webkit-animation-delay: 0s;
 }
 
 .user-location-pulse-ring.ring-2 {
-    animation-delay: 0.8s;
+    animation-delay: 1.4s;
+    -webkit-animation-delay: 1.4s;
 }
 
-.user-location-pulse-ring.ring-3 {
-    animation-delay: 1.6s;
+@-webkit-keyframes cyanRadarPulse {
+    0% {
+        -webkit-transform: scale(0.2) translateZ(0);
+        transform: scale(0.2) translateZ(0);
+        opacity: 1;
+    }
+    60% {
+        -webkit-transform: scale(1.35) translateZ(0);
+        transform: scale(1.35) translateZ(0);
+        opacity: 0.35;
+    }
+    100% {
+        -webkit-transform: scale(2.0) translateZ(0);
+        transform: scale(2.0) translateZ(0);
+        opacity: 0;
+    }
 }
 
 @keyframes cyanRadarPulse {
     0% {
-        transform: scale(0.2);
+        transform: scale(0.2) translateZ(0);
         opacity: 1;
     }
     60% {
-        transform: scale(1.35);
+        transform: scale(1.35) translateZ(0);
         opacity: 0.35;
     }
     100% {
-        transform: scale(2.0);
+        transform: scale(2.0) translateZ(0);
         opacity: 0;
     }
 }
@@ -1313,14 +1342,13 @@ body.dark-mode .popup-actions {
     box-shadow: 0 0 6px #ffffff;
 }
 
-/* Cyan accuracy circle and tooltip (Refined) */
+/* Cyan accuracy circle and tooltip (Refined & WebKit GPU safe) */
 .cyan-accuracy-circle {
     stroke: rgba(0, 255, 255, 0.75) !important;
     stroke-width: 1.5px !important;
     stroke-dasharray: 6, 6 !important;
     fill: #00ffff !important;
     fill-opacity: 0.05 !important;
-    filter: drop-shadow(0 0 5px rgba(0, 255, 255, 0.35));
 }
 
 .cyan-accuracy-tooltip {
@@ -1446,9 +1474,32 @@ body.dark-mode .accuracy-low {
     border: 1.5px solid #ef4444;
     background: rgba(239, 68, 68, 0.08);
     animation: detectedLsPingExpand 2.4s cubic-bezier(0.15, 0.85, 0.35, 1) infinite;
+    -webkit-animation: detectedLsPingExpand 2.4s cubic-bezier(0.15, 0.85, 0.35, 1) infinite;
     pointer-events: none;
     will-change: transform, opacity;
     transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+@-webkit-keyframes detectedLsPingExpand {
+    0% {
+        -webkit-transform: scale(0.3) translateZ(0);
+        transform: scale(0.3) translateZ(0);
+        opacity: 0.85;
+        border-color: #ef4444;
+    }
+    50% {
+        border-color: #f59e0b;
+        opacity: 0.45;
+    }
+    100% {
+        -webkit-transform: scale(1.8) translateZ(0);
+        transform: scale(1.8) translateZ(0);
+        opacity: 0;
+        border-color: #eab308;
+    }
 }
 
 @keyframes detectedLsPingExpand {
